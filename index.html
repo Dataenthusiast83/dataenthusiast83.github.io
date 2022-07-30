@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<head>
+<meta charset="utf-8">
+<title>Top 100 Hotel</title>
+<script src="./jquery.min.js" charset="utf-8"></script>
+
+<!-- Load local d3.js -->
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script src="https://rawgit.com/susielu/d3-annotation/master/d3-annotation.min.js"></script>
+
+<style>
+     #chart text {
+        fill: black;
+        text-anchor: end;
+        font: 10px sans-serif;
+    }
+
+    .axis text {
+        font: 12px sans-serif;
+    }
+
+    #text {
+        font: 16px sans-serif;
+        width: 90%;
+    }
+
+    footer{
+        font: 12px sans-serif;
+        margin-top: 50px;
+        text-align: center;
+    }
+
+</style>
+</head>
+
+<body onload="init()">
+
+<div><h1 style="text-align:center;">The top 100 Hotels in the world 2021</h1> </div>
+
+<p>Filter: <span id="filter"></span></p>
+
+<div><h2 id="levelText"></h2> </div>
+
+<div id="chart" style="height:500px;width:1200px">
+    <div class="innerCont" style="bottom: 100px; left: 100px; height:100% ;"></div>
+</div>
+
+<div id="text">
+<p>The results for the best hotels around the world are in following a voting period of four months which closed May 2021. The metrics through which the hotels were picked ranged from facilities, location and overall value. With the lifting of the covid travel restrictions, many travel buff have been yearning for a good return of money in the form of luxury stays following the lockdown restrictions that rocked the whole world. </p>
+
+<p>The results shows that there is something for everyone across all the regions of the world according to one’s style. In this visualization we bring a breakdown of all the average ratings for the hotels in the regions that made the top 100 cut and the various categories they fall in and what’s best we included a direct link to these hotels so that you can book your stay for a wonderful experience.</p>
+</div>
+
+<footer>   
+    <p>...To travel is to live</p>
+</footer>
+<script>
+
+    var chartData = [];
+    var activeData = [];
+    var activeValues= [];
+    var regionColors = ['#e41a1c', '#377eb8', '#FFA500', '#0070C0', '#ff0000', '#2596be', '#873e23', '#704080', '#404000'];
+
+async function init() {
+
+    const data = await d3.csv("100_hotels.csv");
+    
+    
+    data.forEach(d => {
+        let region = d['Region']
+        let score = parseFloat(d['Score']);
+        let country = d['Country'];
+        let hotel = d['Hotel'];
+        let theme = d['Theme'];
+        let website = d['Website'];
+
+        let isExisting = chartData.findIndex(dt => dt.region === region);
+        let regionObject = {};
+        let themeObject = {};
+        let countryObject = {};
+        let hotelObject = {};
+
+        if (isExisting < 0) {
+            regionObject["region"] = region;
+            regionObject["score"] = score;
+            regionObject["themes"];
+            regionObject["color"] = regionColors[chartData.length-1];
+
+            themeObject["theme"] = theme;
+            themeObject["score"] = score;
+            themeObject["countries"];
+
+            countryObject["country"] = country;
+            countryObject["score"] = score;
+            countryObject["hotels"];
+
+            hotelObject["hotel"] = hotel;
+            hotelObject["website"] = website;
+            hotelObject["score"] = score;
+
+            countryObject["hotels"] = [hotelObject];
+            themeObject["countries"]  = [countryObject];
+            regionObject["themes"] = [themeObject];
+            chartData = [...chartData, regionObject];
+        } else {
+            let existingTheme = chartData[isExisting]["themes"].findIndex(dt => dt.theme === theme);
+
+            if (existingTheme < 0 ){
+                themeObject["theme"] = theme;
+                themeObject["score"] = score;
+                themeObject["countries"];
+
+                countryObject["country"] = country;
+                countryObject["score"] = score;
+                countryObject["hotels"];
+
+                hotelObject["hotel"] = hotel;
+                hotelObject["score"] = score;
+                hotelObject["website"] = website;
+
+                countryObject["hotels"] = [hotelObject];
+                themeObject["countries"]  = [countryObject];
+
+                regionObject = {...chartData[isExisting]};
+                regionObject['themes'] = [...chartData[isExisting]["themes"], themeObject];
+                regionObject['score'] = calAverage(regionObject['score'], score)
+            }else{
+                let existingCountry = chartData[isExisting]["themes"][existingTheme]['countries'].findIndex(dt => dt.country === country);
+                if (existingCountry < 0 ){
+                    countryObject["country"] = country;
+                    countryObject["score"] = score;
+                    countryObject["hotels"];
+
+                    hotelObject["hotel"] = hotel;
+                    hotelObject["score"] = score;
+                    hotelObject["website"] = website;
+
+                    countryObject["hotels"] = [hotelObject];
+
+                    themeObject = {...chartData[isExisting]["themes"][existingTheme]};
+                    themeObject['countries'] = [...chartData[isExisting]["themes"][existingTheme]['countries'], countryObject];
+                    themeObject['score'] = calAverage(themeObject['score'], score);
+
+                    regionObject = {...chartData[isExisting]};
+                    regionObject['score'] = calAverage(regionObject['score'], score);
+                    regionObject['themes'][existingTheme] = themeObject;
+
+                }else{
+                    hotelObject["hotel"] = hotel;
+                    hotelObject["score"] = score;
+                    hotelObject["website"] = website;
+
+                    countryObject = {...chartData[isExisting]["themes"][existingTheme]['countries'][existingCountry]};
+                    countryObject['score'] = calAverage(countryObject['score'], score);
+                    countryObject['hotels'] = [...chartData[isExisting]["themes"][existingTheme]['countries'][existingCountry]['hotels'], hotelObject];
+                    
+                    themeObject = {...chartData[isExisting]["themes"][existingTheme]};
+                    themeObject['score'] = calAverage(themeObject['score'], score);
+                    themeObject['countries'][existingCountry] = countryObject;
+
+                    regionObject = {...chartData[isExisting]};
+                    regionObject['score'] = calAverage(regionObject['score'], score);
+                    regionObject['themes'][existingTheme] = themeObject;
+
+                }
+            }
+            chartData[isExisting] = regionObject;
+        }
+    });
+
+    console.log(chartData);
+
+    drawBarchart('region')
+
+}
+
+    function drawBarchart(level){
+        const id = 'chart';
+        chart = d3.select("#" + id + " .innerCont");
+
+        let filter = [`<a href="#" onclick="(function(){d3.selectAll('#chart svg').remove(); drawBarchart('region')})()">Region</a>`];
+
+        if (activeValues.length === 1) {
+            d3.select("#levelText").html("What is your Feel?");
+            filter.push(`<a href="#">Themes</a>`);
+        }
+
+        if (activeValues.length === 2) {
+            d3.select("#levelText").html("What is your next Destination?");
+            filter.push(`<a href="#" onclick="(function(){activeValues.pop(); d3.selectAll('#chart svg').remove(); drawBarchart('theme')})()">Themes (${activeValues[0]})</a>`);
+            filter.push(`<a href="#">Countries</a>`);
+        }
+
+        if (activeValues.length === 3) {
+            d3.select("#levelText").html("Pick a stay, click to book your experience");
+            filter.push(`<a href="#" onclick="(function(){activeValues.splice(activeValues.length - 2, 2);; d3.selectAll('#chart svg').remove(); drawBarchart('theme')})()">Themes (${activeValues[0]})</a>`)
+            filter.push(`<a href="#" onclick="(function(){activeValues.pop(); d3.selectAll('#chart svg').remove(); drawBarchart('country')})()">Countries (${activeValues[1]})</a>`)
+            filter.push(`<a href="#">Hotels</a>`);
+        }
+
+        d3.select("#filter").html(filter.join(' > '));
+        
+
+        var margin = { top: 150, right: 10, bottom: 30, left: 50 },
+        width = $($("#" + id + " .innerCont")[0]).outerWidth() - margin.left - margin.right,
+        height = $($("#" + id + " .innerCont")[0]).outerHeight() - margin.top - margin.bottom
+        var xVarName;
+        var yVarName = 'Score';
+        var xAry = [];
+
+        console.log(activeValues);
+
+        if (level == 'region') {
+            xVarName = 'region';
+
+            xAry = chartData.map(function (dt) {
+                return dt[xVarName];
+            });
+
+            activeData = chartData;
+            activeValues = []
+        }else if (level == 'theme' && activeValues.length == 1) { 
+            xVarName = level;
+
+            let region = chartData.findIndex(e => e.region === activeValues[0] );
+            activeData = chartData[region]["themes"];
+            xAry = activeData.map(function (dt) {
+                return dt[xVarName];
+            });
+        }else if (level == 'country' && activeValues.length == 2) { 
+            xVarName = level;
+
+            let region = chartData.findIndex(e => e.region === activeValues[0] );
+            let theme = chartData[region]["themes"].findIndex(e => e.theme === activeValues[1] );
+            activeData = chartData[region]["themes"][theme]['countries'];
+            xAry = activeData.map(function (dt) {
+                return dt[xVarName];
+            });
+        }else if (level == 'hotel' && activeValues.length == 3) { 
+            xVarName = level;
+
+            let region = chartData.findIndex(e => e.region === activeValues[0] );
+            let theme = chartData[region]["themes"].findIndex(e => e.theme === activeValues[1] );
+            let country = chartData[region]["themes"][theme]['countries'].findIndex(e => e.country === activeValues[2] );
+            activeData = chartData[region]["themes"][theme]['countries'][country]["hotels"];
+            xAry = activeData.map(function (dt) {
+                return dt[xVarName];
+            });
+        }
+
+
+        var colors = chartData.map(function (dt) {
+            return dt.color;
+        });
+
+
+        var x = d3.scaleBand().domain(xAry).rangeRound([0, width], .5);
+        var y = d3.scaleLinear().domain([0, 100]).range([height, 0]);
+        var rcolor = d3.scaleOrdinal().range(colors);
+
+        chart = chart
+                    .append("svg")  //append svg element inside #chart
+                    .attr("width", width + margin.left + margin.right)    //set width
+                    .attr("height", height + margin.top + margin.bottom);  //set height
+
+        var bar = chart.selectAll("g")
+                        .data(activeData)
+                        .enter()
+                        .append("g")
+                        .attr("transform", function (d) {
+                            return "translate(" + x(d[xVarName]) + ", 0)";
+                        });
+
+        var ctrtxt = 0;
+        var xAxis = d3.axisBottom()
+                    .scale(x)
+                    .ticks(xAry.length);
+
+        var yAxis = d3.axisLeft()
+                        .scale(y)
+                        .ticks(5); //orient left because y-axis tick labels will appear on the left side of the axis.
+
+        bar.append("rect")
+            .attr("y", function (d) {
+                return y(d.score) + margin.top - 15;
+            })
+            .attr("x", function (d) {
+                return (margin.left + (x.bandwidth()) / 4);
+            })
+            .on("mouseenter", function (d) {
+                d3.select(this)
+                    .attr("stroke", "white")
+                    .attr("stroke-width", 1)
+                    .attr("y", function (d) {
+                        return y(d.score) + margin.top - 20;
+                    })
+                    .attr("height", function (d) {
+                        return height - y(d.score) + 5;
+                    })
+                    .attr("x", function (d) {
+                        return (margin.left - 5 + (x.bandwidth()) / 4);
+                    })
+                    .attr("width", (x.bandwidth())/2 + 10);
+
+
+            })
+            .on("mouseleave", function (d) {
+                d3.select(this)
+                    .attr("stroke", "none")
+                    .attr("y", function (d) {
+                        return y(d.score) + margin.top - 15;
+                    })
+                    .attr("height", function (d) {
+                        return height - y(d.score);
+                    })
+                    .attr("x", function (d) {
+                        return (margin.left + (x.bandwidth()) / 4);
+                    })
+                    .attr("width", (x.bandwidth()) / 2);
+
+            })
+            .on("click", function (d) {
+                if (this._listenToEvents) {
+                    // Reset inmediatelly
+                    d3.select(this).attr("transform", "translate(0,0)")
+                    // Change level on click if no transition has started
+                    path.each(function () {
+                        this._listenToEvents = false;
+                    });
+                }
+                
+                if (level == 'region') {
+                    activeValues.push(d.region);
+                    d3.selectAll("#" + id + " svg").remove();
+                    drawBarchart('theme');
+                    
+                }else if (level == 'theme') {
+                    activeValues.push(d.theme);
+                    d3.selectAll("#" + id + " svg").remove();
+                    drawBarchart('country');
+                }else if (level == 'country') {
+                    activeValues.push(d.country);
+                    d3.selectAll("#" + id + " svg").remove();
+                    drawBarchart('hotel');
+                }else {
+                    Object.assign(document.createElement('a'), {
+                        target: '_blank',
+                        rel: 'noopener noreferrer',
+                        href: d.website,
+                    }).click();
+                }
+
+            });
+
+
+        bar.selectAll("rect")
+        .transition()
+        .duration(1000)
+        .attr("height", function (d) {
+            return height - y(d.score);
+        })
+        .attr("width", (x.bandwidth()) / 2); //set width base on range on ordinal data;
+
+        bar.selectAll("rect").style("fill", function (d) {
+            return rcolor(d[xVarName]);
+        }),
+
+        bar.append("text")
+            .attr("x", x.bandwidth() / 2 + margin.left - 10)
+            .attr("y", function (d) { return y(d.score) + margin.top - 25; })
+            .attr("dy", ".35em")
+            .text(function (d) {
+                return d.score;
+            });
+
+        bar.append("svg:title")
+            .text(function (d) {
+                if (activeValues.length > 2) {
+                    return "The rating of " + d[xVarName] + " is " + d.score;
+                }
+
+                if (activeValues.length === 0) {
+                    return "The average rating of hotels in " + d[xVarName] + " is " + d.score;
+                }
+
+                if (activeValues.length === 1) {
+                    return "The average rating of " + d[xVarName] + " hotels in " + activeValues[0] +" is " + d.score;
+                }
+                return "The average rating of hotels in " + d[xVarName] + " is " + d.score;
+            });
+
+
+        chart.append("g")
+            .attr("class", "x axis")
+            .attr("transform", "translate(" + margin.left + "," + (height + margin.top - 15) + ")")
+            .call(xAxis)
+            .append("text")
+            .style("text-anchor", "middle")
+        
+
+        chart.append("g")
+            .attr("class", "y axis")
+            .attr("transform", "translate(" + margin.left + "," + (margin.top - 15) + ")")
+            .call(yAxis)
+            .append("text")
+            .attr("transform", "rotate(-90)")
+            .attr("y", 6)
+            .attr("dy", ".71em")
+            .style("text-anchor", "end")
+
+            const annotations = []
+
+            if (level == 'region') {
+                annotations.push({
+                    note: {
+                    label: "Asia has the highest average rated hotels",
+                    wrap: 200
+                    },
+                    x: 370,
+                    y: 200,
+                    dy: -100,
+                    dx: 100
+                });
+            }
+
+            if (level == 'hotel') {
+                annotations.push({
+                    note: {
+                    label: "Mahali Mzuri is the best hotel in the world",
+                    wrap: 200
+                    },
+                    x: 200,
+                    y: 200,
+                    dy: -100,
+                    dx: 100
+                });
+            }
+
+            const makeAnnotations = d3.annotation()
+            .annotations(annotations)
+            
+           chart
+            .append("g")
+            .call(makeAnnotations)
+
+    }
+
+    function calAverage(num1, num2) {
+        return parseFloat(((num1 + num2) / 2).toFixed(2));
+    }
+
+
+</script>
+</body>
+</html>
